@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>IPL Auction</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+<!-- ================= SCREEN 1 ================= -->
+<div id="screen1" class="screen landing">
+  <div class="landing-card">
+    <h1 class="title">🏏 IPL Auction</h1>
+    <p class="subtitle">Create or join a live auction room</p>
+
+    <div class="btn-group">
+      <button class="primary-btn" onclick="showCreate()">Create Room</button>
+      <button class="secondary-btn" onclick="showJoin()">Join Room</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ================= CREATE ROOM ================= -->
+<div id="screenCreate" class="screen hidden">
+  <div class="form-card">
+    <h2>Create Auction Room</h2>
+    <p>Enter your name to become admin</p>
+
+    <input id="createName" placeholder="Your Name">
+    <button class="primary-btn full" onclick="createRoom()">Create & Join</button>
+
+    <span class="back" onclick="hideAllScreens(); document.getElementById('screen1').classList.remove('hidden')">← Back</span>
+  </div>
+</div>
+
+
+<!-- ================= JOIN ROOM ================= -->
+<div id="screenJoin" class="screen hidden">
+  <div class="form-card">
+    <h2>Join Auction Room</h2>
+    <p>Enter room code & your name</p>
+
+    <input id="joinRoomId" placeholder="Room Code">
+    <input id="joinName" placeholder="Your Name">
+    <button class="primary-btn full" onclick="joinRoom()">Join Room</button>
+
+    <span class="back" onclick="hideAllScreens(); document.getElementById('screen1').classList.remove('hidden')">← Back</span>
+  </div>
+</div>
+
+
+<!-- ================= AUCTION UI ================= -->
+<div id="auctionScreen" class="hidden">
+
+<header class="top-bar">
+  <div class="headcentre">
+    <h1>🏏 IPL Auction Live</h1>
+    <div id="roomCode" style="font-size:14px; opacity:0.8;"></div>
+    
+  </div>
+</header>
+
+<div id="adminPanel" class="admin-panel" style="display:none;">
+  <button onclick="adminAction('start')">▶ Start</button>
+  <button onclick="adminAction('pause')">⏸ Pause</button>
+  <button onclick="adminAction('resume')">▶ Resume</button>
+  <button onclick="adminAction('skip')">⏭ Skip</button>
+  <button onclick="adminAction('normal')">🕐 Normal Mode</button>
+  <button onclick="adminAction('rapid')">⚡ Rapid Mode</button>
+  <button style="background:#ff2e2e;" onclick="adminAction('end')">⛔ End Auction</button>
+</div>
+
+<div class="auction-container">
+
+  <div class="left-panel">
+    <h3>Upcoming Players</h3>
+    <ul id="upcomingPlayers" class="upcoming-list"></ul>
+  </div>
+
+
+  <!-- ================= IPL INTRO ================= -->
+  <div id="iplIntro" class="ipl-intro">
+    <div class="intro-bg"></div>
+    <div class="intro-content">
+      <div class="intro-logo">🏏</div>
+      <h1 class="intro-title">IPL AUCTION</h1>
+      <p class="intro-sub">LIVE • INTENSE • REAL-TIME</p>
+    </div>
+  </div>
+
+  <div class="center-panel">
+    <div class="player-card">
+      <h2 id="player">Player Name</h2>
+      <p id="role">Role</p>
+      <h1 id="status">₹0.00 Cr</h1>
+      <div id="timer" class="timer">10</div>
+
+      <button id="bidBtn" onclick="placeBid()">BID</button>
+      <p id="nextBid"></p>
+    </div>
+  </div>
+
+  <div class="chat-box">
+    <div class="chat-header">💬 Trash Talk</div>
+    <div id="chatMessages" class="chat-messages"></div>
+    <div class="chat-input">
+      <input id="chatInput" placeholder="Type your trash talk 😈"
+             onkeydown="if(event.key==='Enter') sendChat()">
+      <button onclick="sendChat()">Send</button>
+    </div>
+  </div>
+
+  <div class="right-panel">
+    <h3>Teams</h3>
+    <div id="teams"></div>
+  </div>
+    <div class="right-panel">
+    <h3 style="margin-top:20px;">❌ Unsold Players</h3>
+  <ul id="unsoldPlayers" class="upcoming-list"></ul>
+</div>
+
+</div>
+</div>
+
+
+<!-- ================= PLAYING 11 & POSITIONS SCREEN ================= -->
+<div id="playing11Screen" class="hidden">
+  <div class="playing11-card">
+    <h1>🏆 Select Playing 11 & Assign Positions</h1>
+    <p id="playing11Instruction">Choose 11 players and assign them positions (1-11)</p>
+    
+    <div class="playing11-container">
+      <div id="playerList" class="player-position-list"></div>
+      <div class="playing11-counter">
+        <p>Selected: <span id="selectedCount">0</span>/11 | Positions: <span id="positionCount">0</span>/11</p>
+      </div>
+    </div>
+
+    <button id="submitPlaying11" class="primary-btn full" onclick="submitCombinedPlaying11()" disabled>
+      Submit Playing 11
+    </button>
+  </div>
+</div>
+
+<!-- ================= AUCTION SUMMARY SCREEN ================= -->
+<div id="summaryScreen" class="hidden">
+  <div class="summary-card">
+    <h1>🏆 Auction Summary</h1>
+    <div id="summaryTeams"></div>
+  </div>
+</div>
+
+<audio id="bidSound" src="https://assets.mixkit.co/active_storage/sfx/2571/2571-preview.mp3" preload="auto"></audio>
+<audio id="timerTick" src="https://assets.mixkit.co/active_storage/sfx/1003/1003-preview.mp3" preload="auto"></audio>
+<audio id="soldSound" src="https://assets.mixkit.co/active_storage/sfx/2791/2791-preview.mp3" preload="auto"></audio>
+<audio id="introSound" src="https://assets.mixkit.co/active_storage/sfx/1435/1435-preview.mp3"></audio>
+
+<script src="script.js"></script>
+</body>
+</html>
