@@ -1,10 +1,12 @@
 from fastapi import FastAPI, WebSocket
-import random, string, asyncio
-from players import players
-from auction import AuctionRoom
+import random, string, asyncio, os, sys
+from backend.players import ipl_ogs, ipl_2026
+from backend.auction import AuctionRoom
 
 from fastapi.middleware.cors import CORSMiddleware
-
+from players import players
+auction_room = AuctionRoom()
+auction_room.all_players = players
 app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
@@ -16,17 +18,19 @@ app.add_middleware(
 
 rooms = {}
 
+@app.get("/")
+def home():
+    return {"status": "Auction API Running"}
 
 def generate_room_id():
     return ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
-
 
 @app.get("/create-room")
 def create_room():
     room_id = generate_room_id()
     
-
-    shuffled_players = players.copy()
+    # Default to IPL 2026 mode
+    shuffled_players = ipl_2026.copy()
     random.shuffle(shuffled_players)
 
     room = AuctionRoom()
@@ -34,12 +38,12 @@ def create_room():
     room.connections = []
     room.timer_task = None
     room.ended = False
-    room.timer_duration = 10   # default mode
-
+    room.timer_duration = 10
+    room.mode = "2026"
+    room.mode_name = "IPL 2026 Mock Auction"
 
     rooms[room_id] = room
     return {"room_id": room_id}
-
 
 async def broadcast(room, data):
     for conn in list(room.connections):
@@ -67,17 +71,17 @@ async def force_end_auction(room_id):
     })
 
 
+
+
+
 async def start_next_player(room_id):
     room = rooms.get(room_id)
     if not room or room.ended or room.auction_ended:
         return
 
     if not room.players:
-        room.ended = True
-        await broadcast(room, {
-            "type": "auction_end",
-            "teams": room.serialize_teams()
-        })
+        # No players left — end auction
+        await force_end_auction(room_id)
         return
 
     player = random.choice(room.players)
@@ -194,9 +198,32 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
     try:
         while True:
             data = await websocket.receive_json()
+            # ✅ SET AUCTION MODE (Admin only, before start)
+            if data["type"] == "set_mode" and username == room.admin and not room.started:
+                mode = data.get("mode", "2026")
+                mode_name = data.get("mode_name", "IPL 2026 Mock Auction")
+                
+                # Load appropriate player list based on mode
+                if mode == "ogs":
+                    shuffled_players = ipl_ogs.copy()
+                    room.mode = "ogs"
+                    room.mode_name = "IPL OGs Auction"
+                    room.all_players = ipl_ogs   # ✅ ADD THIS
+                else:
+                    shuffled_players = ipl_2026.copy()
+                    room.mode = "2026"
+                    room.mode_name = "IPL 2026 Mock Auction"
+                    room.all_players = ipl_2026  # ✅ ADD THIS
 
+                random.shuffle(shuffled_players)
+                room.players = shuffled_players
+                
+                await broadcast(room, {
+                    "type": "mode_update",
+                    "mode": f"Mode: {room.mode_name}"
+                })
             # ✅ ADMIN CONTROLS
-            if data["type"] == "admin_action" and username == room.admin:
+            elif data["type"] == "admin_action" and username == room.admin:
 
                 if data["action"] == "start" and not room.started:
                     room.started = True
@@ -274,8 +301,10 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
 
             # ✅ PLAYING 11 SELECTION
             elif data["type"] == "playing_11":
-                playing_11 = data.get("players", [])
                 
+                playing_11 = data.get("players", [])
+                print("PLAYING 11 RECEIVED:", playing_11)
+
                 # Validate that playing_11 has exactly 11 players
                 if len(playing_11) == 11:
                     room.set_playing_11(username, playing_11)
@@ -285,6 +314,17 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
                         "type": "team_update",
                         "teams": room.serialize_teams()
                     })
+                    # If ALL teams have submitted their playing 11, notify clients
+                    try:
+                        all_submitted = all(len(t.playing_11) == 11 for t in room.teams.values())
+                    except Exception:
+                        all_submitted = False
+
+                    if all_submitted:
+                        await broadcast(room, {
+                            "type": "playing_11_complete",
+                            "teams": room.serialize_teams()
+                        })
 
             # ✅ PLAYING 11 POSITIONS
             elif data["type"] == "playing_11_positions":
@@ -299,6 +339,17 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
                         "type": "team_update",
                         "teams": room.serialize_teams()
                     })
+                    # Also check if all teams have submitted playing 11 and broadcast completion
+                    try:
+                        all_submitted = all(len(t.playing_11) == 11 for t in room.teams.values())
+                    except Exception:
+                        all_submitted = False
+
+                    if all_submitted:
+                        await broadcast(room, {
+                            "type": "playing_11_complete",
+                            "teams": room.serialize_teams()
+                        })
 
     except Exception:
         if websocket in room.connections:
