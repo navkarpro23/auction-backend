@@ -5,8 +5,6 @@ let auctionPhase = "idle";
 let currentBid = 0;
 let minBid = 0;
 let finalTeamsData = null; // ✅ store summary data
-let upcomingPlayersList = []; // ✅ store upcoming players to remove when sold
-let soldPlayerNames = new Set(); // ✅ PERMANENT tracking of sold players throughout auction
 
 /* ================= AUDIO HELPERS ================= */
 
@@ -48,7 +46,7 @@ function hideAllScreens() {
   document.getElementById("screenJoin").classList.add("hidden");
   document.getElementById("auctionScreen").classList.add("hidden");
   document.getElementById("playing11Screen").classList.add("hidden");
-  document.getElementById("summaryScreen").classList.add("hidden");
+  document.getElementById("summaryScreen").classList.add("hidden"); // ✅ added
 }
 
 function showCreate() {
@@ -68,7 +66,7 @@ async function createRoom() {
   if (!username) { alert("Enter your name"); return; }
 
   try {
-    const res = await fetch("https://auction-app-semq.onrender.com/create-room");
+    const res = await fetch("http://127.0.0.1:8000/create-room");
     const data = await res.json();
     roomId = data.room_id;
     startAuction();
@@ -87,7 +85,7 @@ function startAuction() {
   document.getElementById("auctionScreen").classList.remove("hidden");
   document.getElementById("roomCode").innerText = "Room Code: " + roomId;
 
-  socket = new WebSocket("wss://auction-app-semq.onrender.com/ws/" + roomId + "/" + username);
+  socket = new WebSocket(`ws://127.0.0.1:8000/ws/${roomId}/${username}`);
   socket.onmessage = handleSocketMessage;
 }
 
@@ -173,22 +171,6 @@ function handleSocketMessage(event) {
       `🏆 ${data.player.name} SOLD to ${data.buyer} for ₹${data.price} Cr`;
 
     renderTeams(data.teams);
-
-    // Remove from unsold list if player was accidentally added there due to race condition
-    const unsoldList = document.getElementById("unsoldPlayers");
-    const unsoldItems = unsoldList.querySelectorAll("li");
-    unsoldItems.forEach(item => {
-      if (item.textContent.includes(data.player.name)) {
-        item.remove();
-      }
-    });
-
-    // Permanently track as sold to prevent re-adding
-    soldPlayerNames.add(data.player.name);
-    
-    // Remove sold player from upcoming players list
-    upcomingPlayersList = upcomingPlayersList.filter(p => p.name !== data.player.name);
-    renderUpcomingPlayers(upcomingPlayersList);
   }
 
   // Unsold
@@ -203,13 +185,6 @@ if (data.type === "unsold") {
   li.innerText = `${data.player.name} (${data.player.role})`;
 
   unsoldList.appendChild(li);
-
-  // Permanently track as unsold to prevent re-adding
-  soldPlayerNames.add(data.player.name);
-
-  // Remove unsold player from upcoming players list
-  upcomingPlayersList = upcomingPlayersList.filter(p => p.name !== data.player.name);
-  renderUpcomingPlayers(upcomingPlayersList);
 }
 if (data.type === "mode_update") {
   document.getElementById("status").innerText =
@@ -226,14 +201,6 @@ if (data.type === "mode_update") {
     showPlaying11Selection(data.teams);
   }
 
-  // WHEN ALL PLAYING 11 SUBMITTED
-  if (data.type === "playing_11_complete") {
-    stopSound("timerTick");
-    // Hide playing 11 UI and show summary with teams
-    try { document.getElementById("playing11Screen").classList.add("hidden"); } catch(e){}
-    showSummaryScreenAfterPlaying11(data.teams || {});
-  }
-
   // Chat
   if (data.type === "chat") {
     addChatMessage(data.user, data.message);
@@ -243,7 +210,6 @@ if (data.type === "mode_update") {
     renderUpcomingPlayers(data.players);
   }
 }
-
 
 /* ================= LOGIC ================= */
 
@@ -271,238 +237,138 @@ function placeBid() {
 }
 
 function renderUpcomingPlayers(players) {
-  // Filter out ALL sold/unsold players (permanent tracking) to prevent re-adding
-  const filtered = players.filter(p => !soldPlayerNames.has(p.name));
-  upcomingPlayersList = [...filtered]; // Store the filtered list
   const div = document.getElementById("upcomingPlayers");
-  const countSpan = document.getElementById("upcomingCount");
-  
-  div.innerHTML = filtered.map(p =>
+  div.innerHTML = players.map(p =>
     `<div>${p.name} (${p.role})</div>`).join("");
-  
-  // Extra safeguard: remove any sold players that somehow made it into the DOM
-  const playerDivs = div.querySelectorAll("div");
-  playerDivs.forEach(playerDiv => {
-    const playerName = playerDiv.textContent.split(" (")[0]; // Extract name before role
-    if (soldPlayerNames.has(playerName)) {
-      playerDiv.remove();
-    }
-  });
-  
-  // Update the count
-  const count = div.querySelectorAll("div").length;
-  countSpan.innerText = `(${count})`;
 }
 
-/* ================= PLAYING 11 SELECTION & POSITIONS (CLASSIC DRAG & DROP) ================= */
+/* ================= PLAYING 11 SELECTION & POSITIONS (COMBINED) ================= */
 
 let allTeamsData = null;
-let combinedPlaying11 = {}; // Store position -> player mapping
-let draggedPlayerData = null;
+let combinedPlaying11 = {}; // Store player -> position mapping
 
 function showPlaying11Selection(teams) {
   allTeamsData = teams;
   document.getElementById("auctionScreen").classList.add("hidden");
   document.getElementById("playing11Screen").classList.remove("hidden");
 
-  const availablePlayersList = document.getElementById("availablePlayersList");
-  availablePlayersList.innerHTML = "";
+  const playerList = document.getElementById("playerList");
+  playerList.innerHTML = "";
 
   // Get current user's players
   if (teams[username] && teams[username].players) {
     teams[username].players.forEach(player => {
-      const playerCard = document.createElement("div");
-      playerCard.className = "player-card draggable";
-      playerCard.draggable = true;
-      playerCard.dataset.playerName = player.name;
-      playerCard.dataset.playerRole = player.role;
-      playerCard.dataset.playerPrice = player.price;
+      const div = document.createElement("div");
+      div.className = "player-position-item";
 
-      playerCard.innerHTML = `
-        <div class="player-card-content">
-          <strong>${player.name}</strong>
-          <small>${player.role}</small>
-          <small class="price">₹${player.price.toFixed(2)} Cr</small>
+      div.innerHTML = `
+        <div class="player-select-wrapper">
+          <input type="checkbox" class="player-select" data-player="${player.name}" 
+                 onchange="updateCombinedCount()">
+          <span class="player-info">
+            <strong>${player.name}</strong>
+            <small>${player.role} - ₹${player.price.toFixed(2)} Cr</small>
+          </span>
+        </div>
+        <div class="position-select-wrapper">
+          <label>Position:</label>
+          <select class="position-select" data-player="${player.name}" 
+                  onchange="updateCombinedCount()" disabled>
+            <option value="">--</option>
+            ${Array.from({length: 11}, (_, i) => `<option value="${i + 1}">${i + 1}</option>`).join("")}
+          </select>
         </div>
       `;
 
-      // Drag events
-      playerCard.addEventListener("dragstart", handlePlayerDragStart);
-      playerCard.addEventListener("dragend", handlePlayerDragEnd);
-
-      availablePlayersList.appendChild(playerCard);
+      playerList.appendChild(div);
     });
   }
-
-  // Setup drop zones
-  document.querySelectorAll(".droppable-zone").forEach(zone => {
-    zone.addEventListener("dragover", handleDragOver);
-    zone.addEventListener("drop", handleDrop);
-    zone.addEventListener("dragleave", handleDragLeave);
-  });
 }
 
-function handlePlayerDragStart(e) {
-  draggedPlayerData = {
-    name: e.currentTarget.dataset.playerName,
-    role: e.currentTarget.dataset.playerRole,
-    price: parseFloat(e.currentTarget.dataset.playerPrice)
-  };
-  e.currentTarget.classList.add("dragging");
-  e.dataTransfer.effectAllowed = "move";
-}
+function updateCombinedCount() {
+  const playerItems = document.querySelectorAll(".player-position-item");
+  combinedPlaying11 = {};
+  let selectedCount = 0;
+  let positionCount = 0;
+  const usedPositions = new Set();
+  let allPositionsUnique = true;
 
-function handlePlayerDragEnd(e) {
-  e.currentTarget.classList.remove("dragging");
-  draggedPlayerData = null;
-  document.querySelectorAll(".droppable-zone").forEach(zone => {
-    zone.parentElement.classList.remove("drag-over");
-  });
-}
+  playerItems.forEach(item => {
+    const checkbox = item.querySelector(".player-select");
+    const positionSelect = item.querySelector(".position-select");
+    const playerName = checkbox.dataset.player;
 
-function handleDragOver(e) {
-  e.preventDefault();
-  e.dataTransfer.dropEffect = "move";
-  e.currentTarget.parentElement.classList.add("drag-over");
-}
+    if (checkbox.checked) {
+      selectedCount++;
+      positionSelect.disabled = false;
 
-function handleDragLeave(e) {
-  if (e.currentTarget === e.target) {
-    e.currentTarget.parentElement.classList.remove("drag-over");
-  }
-}
-
-function handleDrop(e) {
-  e.preventDefault();
-  e.stopPropagation();
-
-  const dropZone = e.currentTarget;
-  const positionBox = dropZone.parentElement;
-  const position = parseInt(positionBox.dataset.position);
-
-  if (!draggedPlayerData) return;
-
-  // If position already has a player, move it back to available players
-  const existingPlayer = dropZone.querySelector(".dropped-player");
-  if (existingPlayer) {
-    const prevPlayerName = existingPlayer.dataset.playerName;
-    const prevPlayerRole = existingPlayer.dataset.playerRole;
-    const prevPlayerPrice = parseFloat(existingPlayer.dataset.playerPrice);
-    
-    // Add back to available players
-    const availableList = document.getElementById("availablePlayersList");
-    const playerCard = document.createElement("div");
-    playerCard.className = "player-card draggable";
-    playerCard.draggable = true;
-    playerCard.dataset.playerName = prevPlayerName;
-    playerCard.dataset.playerRole = prevPlayerRole;
-    playerCard.dataset.playerPrice = prevPlayerPrice;
-    playerCard.innerHTML = `
-      <div class="player-card-content">
-        <strong>${prevPlayerName}</strong>
-        <small>${prevPlayerRole}</small>
-        <small class="price">₹${prevPlayerPrice.toFixed(2)} Cr</small>
-      </div>
-    `;
-    playerCard.addEventListener("dragstart", handlePlayerDragStart);
-    playerCard.addEventListener("dragend", handlePlayerDragEnd);
-    availableList.appendChild(playerCard);
-
-    delete combinedPlaying11[position];
-  }
-
-  // Remove player from any other position
-  Object.keys(combinedPlaying11).forEach(pos => {
-    if (combinedPlaying11[pos] === draggedPlayerData.name) {
-      const oldZone = document.querySelector(`.position-box[data-position="${pos}"] .droppable-zone`);
-      if (oldZone) {
-        oldZone.innerHTML = "";
+      const position = positionSelect.value;
+      if (position) {
+        const posNum = parseInt(position);
+        
+        // Check for duplicate positions
+        if (usedPositions.has(posNum)) {
+          allPositionsUnique = false;
+        }
+        usedPositions.add(posNum);
+        
+        combinedPlaying11[playerName] = posNum;
+        positionCount++;
       }
-      delete combinedPlaying11[pos];
+    } else {
+      positionSelect.disabled = true;
+      positionSelect.value = "";
     }
   });
 
-  // Add player to position
-  combinedPlaying11[position] = draggedPlayerData.name;
-
-  // Update UI
-  dropZone.innerHTML = `
-    <div class="dropped-player" data-player-name="${draggedPlayerData.name}" data-player-role="${draggedPlayerData.role}" data-player-price="${draggedPlayerData.price}">
-      <div class="player-info-drop">
-        <strong>${draggedPlayerData.name}</strong>
-        <small>${draggedPlayerData.role}</small>
-      </div>
-      <button class="remove-btn" onclick="removeFromPosition(${position})">✕</button>
-    </div>
-  `;
-
-  // Remove from available players
-  const draggedCard = document.querySelector(`.player-card[data-player-name="${draggedPlayerData.name}"]`);
-  if (draggedCard) {
-    draggedCard.remove();
-  }
-
-  updatePlaying11Count();
-  positionBox.classList.remove("drag-over");
-}
-
-function removeFromPosition(position) {
-  const positionBox = document.querySelector(`.position-box[data-position="${position}"]`);
-  const dropZone = positionBox.querySelector(".droppable-zone");
-  const droppedPlayer = dropZone.querySelector(".dropped-player");
-
-  if (droppedPlayer) {
-    const playerName = droppedPlayer.dataset.playerName;
-    const playerRole = droppedPlayer.dataset.playerRole;
-    const playerPrice = parseFloat(droppedPlayer.dataset.playerPrice);
-
-    // Add back to available players
-    const availableList = document.getElementById("availablePlayersList");
-    const playerCard = document.createElement("div");
-    playerCard.className = "player-card draggable";
-    playerCard.draggable = true;
-    playerCard.dataset.playerName = playerName;
-    playerCard.dataset.playerRole = playerRole;
-    playerCard.dataset.playerPrice = playerPrice;
-    playerCard.innerHTML = `
-      <div class="player-card-content">
-        <strong>${playerName}</strong>
-        <small>${playerRole}</small>
-        <small class="price">₹${playerPrice.toFixed(2)} Cr</small>
-      </div>
-    `;
-    playerCard.addEventListener("dragstart", handlePlayerDragStart);
-    playerCard.addEventListener("dragend", handlePlayerDragEnd);
-    availableList.appendChild(playerCard);
-
-    dropZone.innerHTML = "";
-    delete combinedPlaying11[position];
-    updatePlaying11Count();
-  }
-}
-
-function updatePlaying11Count() {
-  const selectedCount = Object.keys(combinedPlaying11).length;
   document.getElementById("selectedCount").innerText = selectedCount;
-  
-  const progressPercentage = (selectedCount / 11) * 100;
-  document.getElementById("progressFill").style.width = progressPercentage + "%";
+  document.getElementById("positionCount").innerText = positionCount;
 
+  // Enable submit button only if exactly 11 players selected with unique positions
   const submitBtn = document.getElementById("submitPlaying11");
-  submitBtn.disabled = selectedCount !== 11;
+  const canSubmit = selectedCount === 11 && positionCount === 11 && allPositionsUnique;
+  
+  submitBtn.disabled = !canSubmit;
+  if (canSubmit) {
+    submitBtn.classList.add("ready");
+  } else {
+    submitBtn.classList.remove("ready");
+  }
 }
 
 function submitCombinedPlaying11() {
-  if (Object.keys(combinedPlaying11).length !== 11) {
-    alert("Please select exactly 11 players!");
+  // Re-validate from DOM on submit to ensure accuracy
+  const playerItems = document.querySelectorAll(".player-position-item");
+  const finalPlaying11 = {};
+  const usedPositions = new Set();
+
+  playerItems.forEach(item => {
+    const checkbox = item.querySelector(".player-select");
+    const positionSelect = item.querySelector(".position-select");
+    const playerName = checkbox.dataset.player;
+
+    if (checkbox.checked) {
+      const position = positionSelect.value;
+      if (position) {
+        const posNum = parseInt(position);
+        finalPlaying11[playerName] = posNum;
+        usedPositions.add(posNum);
+      }
+    }
+  });
+
+  // Validate
+  if (Object.keys(finalPlaying11).length !== 11) {
+    alert("Please select exactly 11 players! Currently selected: " + Object.keys(finalPlaying11).length);
     return;
   }
 
-  const finalPlaying11 = {};
-  Object.entries(combinedPlaying11).forEach(([position, playerName]) => {
-    finalPlaying11[playerName] = parseInt(position);
-  });
+  if (usedPositions.size !== 11) {
+    alert("Please assign unique positions (1-11) to all 11 players! Unique positions: " + usedPositions.size);
+    return;
+  }
 
+  // Send both playing 11 and positions to backend
   socket.send(JSON.stringify({
     type: "playing_11",
     players: Object.keys(finalPlaying11)
@@ -513,15 +379,7 @@ function submitCombinedPlaying11() {
     positions: finalPlaying11
   }));
 
-  // Update local allTeamsData with the playing 11 and positions before showing summary
-  if (allTeamsData && allTeamsData[username]) {
-    allTeamsData[username].playing_11 = Object.keys(finalPlaying11);
-    allTeamsData[username].playing_11_positions = finalPlaying11;
-  }
-
-  console.log("Before showing summary, allTeamsData:", allTeamsData);
-  console.log("Current user's team data:", allTeamsData[username]);
-  
+  // Show summary after submission
   document.getElementById("playing11Screen").classList.add("hidden");
   showSummaryScreenAfterPlaying11(allTeamsData);
 }
@@ -534,12 +392,12 @@ function showSummaryScreenAfterPlaying11(teams) {
 
   let cardIndex = 0;
   for (const [name, data] of Object.entries(teams)) {
-    console.log(`Team ${name}:`, data); // Debug: log team data
     const card = document.createElement("div");
     card.className = "team-card";
     card.style.setProperty("--index", cardIndex);
     cardIndex++;
 
+    const playing11Names = new Set(data.playing_11 || []);
     const positions = data.playing_11_positions || {};
 
     // Create a sorted list of playing 11 by position
@@ -560,11 +418,10 @@ function showSummaryScreenAfterPlaying11(teams) {
       }
     }
 
-    // Render only playing 11 with positions and role indicators
+    // Render playing 11 with positions and role indicators
     const playing11Html = playing11ByPosition.map(p => {
       const roleEmoji = {
         "Batsman": "🏏",
-        "Batter": "🏏",
         "Bowler": "🎯",
         "All-Rounder": "⚡",
         "Wicket-Keeper": "🧤"
@@ -575,7 +432,22 @@ function showSummaryScreenAfterPlaying11(teams) {
       </li>`;
     }).join("");
 
-    const playersHtml = playing11Html || "<li>No playing 11 selected</li>";
+    // Render bench players
+    const benchPlayers = data.players.filter(p => !playing11Names.has(p.name));
+    const benchHtml = benchPlayers.map(p => {
+      const roleEmoji = {
+        "Batsman": "🏏",
+        "Bowler": "🎯",
+        "All-Rounder": "⚡",
+        "Wicket-Keeper": "🧤"
+      }[p.role] || "🎖";
+      
+      return `<li class="bench-player">
+        🪑 ${p.name} ${roleEmoji} – ₹${p.price.toFixed(2)} Cr
+      </li>`;
+    }).join("");
+
+    const playersHtml = playing11Html + benchHtml || "<li>No players</li>";
     
     const totalSpent = (50 - data.purse).toFixed(2);
     const spendPercentage = ((totalSpent / 50) * 100).toFixed(0);
@@ -590,7 +462,7 @@ function showSummaryScreenAfterPlaying11(teams) {
         </div>
       </div>
       <div class="playing11-label">
-        <strong>🏟️ Playing 11</strong>
+        <strong>🏟️ Playing 11 & Bench Squad</strong>
         <small>💰 Spent: ₹${totalSpent} Cr (${spendPercentage}%) | Selected: ${Object.keys(positions).length}/11</small>
       </div>
       <ul class="team-players">
@@ -601,8 +473,7 @@ function showSummaryScreenAfterPlaying11(teams) {
   }
 }
 
-
-/* ================= TEAM RENDER ================= */
+/* ================= SUMMARY SCREEN ================= */
 function showSummaryScreen(teams) {
   document.getElementById("auctionScreen").classList.add("hidden");
   document.getElementById("summaryScreen").classList.remove("hidden");
@@ -625,6 +496,8 @@ function showSummaryScreen(teams) {
     container.appendChild(card);
   }
 }
+
+
 
 /* ================= TEAM RENDER ================= */
 
