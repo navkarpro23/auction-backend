@@ -4,7 +4,6 @@ from players import ipl_ogs, ipl_2026
 from auction import AuctionRoom
 
 from fastapi.middleware.cors import CORSMiddleware
-from players import players
 auction_room = AuctionRoom()
 auction_room.all_players = players
 app = FastAPI()
@@ -354,5 +353,6 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
     except Exception:
         if websocket in room.connections:
             room.connections.remove(websocket)
+
 
 
