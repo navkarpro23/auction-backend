@@ -6,7 +6,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="stylesheet" href="style.css">
 </head>
-
 <body>
 
 <!-- ================= SCREEN 1 ================= -->
@@ -35,6 +34,7 @@
     <span class="back" onclick="hideAllScreens(); document.getElementById('screen1').classList.remove('hidden')">← Back</span>
   </div>
 </div>
+
 
 
 <!-- ================= JOIN ROOM ================= -->
@@ -76,10 +76,9 @@
 <div class="auction-container">
 
   <div class="left-panel">
-    <h3>Upcoming Players</h3>
+    <h3>Upcoming Players <span id="upcomingCount" style="font-size: 0.8em; opacity: 0.8;">(0)</span></h3>
     <ul id="upcomingPlayers" class="upcoming-list"></ul>
   </div>
-
 
   <!-- ================= IPL INTRO ================= -->
   <div id="iplIntro" class="ipl-intro">
@@ -125,23 +124,80 @@
 </div>
 </div>
 
-
 <!-- ================= PLAYING 11 & POSITIONS SCREEN ================= -->
 <div id="playing11Screen" class="hidden">
   <div class="playing11-card">
-    <h1>🏆 Select Playing 11 & Assign Positions</h1>
-    <p id="playing11Instruction">Choose 11 players and assign them positions (1-11)</p>
+    <h1>🏆 Build Your Playing 11</h1>
+    <p id="playing11Instruction">Drag players to position slots • Select exactly 11 players</p>
     
-    <div class="playing11-container">
-      <div id="playerList" class="player-position-list"></div>
-      <div class="playing11-counter">
-        <p>Selected: <span id="selectedCount">0</span>/11 | Positions: <span id="positionCount">0</span>/11</p>
+    <div class="playing11-layout">
+      <!-- Left: Available Players -->
+      <div class="players-container">
+        <h3>📋 Available Players</h3>
+        <div id="availablePlayersList" class="available-players"></div>
+      </div>
+
+      <!-- Right: Position Grid -->
+      <div class="positions-container">
+        <h3>🎯 Playing Positions</h3>
+        <div class="positions-grid">
+          <div class="position-box" data-position="1">
+            <span class="pos-label">1</span>
+            <div class="droppable-zone"></div>
+          </div>
+          <div class="position-box" data-position="2">
+            <span class="pos-label">2</span>
+            <div class="droppable-zone"></div>
+          </div>
+          <div class="position-box" data-position="3">
+            <span class="pos-label">3</span>
+            <div class="droppable-zone"></div>
+          </div>
+          <div class="position-box" data-position="4">
+            <span class="pos-label">4</span>
+            <div class="droppable-zone"></div>
+          </div>
+          <div class="position-box" data-position="5">
+            <span class="pos-label">5</span>
+            <div class="droppable-zone"></div>
+          </div>
+          <div class="position-box" data-position="6">
+            <span class="pos-label">6</span>
+            <div class="droppable-zone"></div>
+          </div>
+          <div class="position-box" data-position="7">
+            <span class="pos-label">7</span>
+            <div class="droppable-zone"></div>
+          </div>
+          <div class="position-box" data-position="8">
+            <span class="pos-label">8</span>
+            <div class="droppable-zone"></div>
+          </div>
+          <div class="position-box" data-position="9">
+            <span class="pos-label">9</span>
+            <div class="droppable-zone"></div>
+          </div>
+          <div class="position-box" data-position="10">
+            <span class="pos-label">10</span>
+            <div class="droppable-zone"></div>
+          </div>
+          <div class="position-box" data-position="11">
+            <span class="pos-label">11</span>
+            <div class="droppable-zone"></div>
+          </div>
+        </div>
       </div>
     </div>
 
-    <button id="submitPlaying11" class="primary-btn full" onclick="submitCombinedPlaying11()" disabled>
-      Submit Playing 11
-    </button>
+    <div class="playing11-footer">
+      <div class="status-bar">
+        <span class="status-text">Selected: <strong id="selectedCount">0</strong> / 11</span>
+        <div class="progress-bar"><div id="progressFill" class="progress-fill"></div></div>
+      </div>
+      <button id="submitPlaying11" class="submit-btn" onclick="submitCombinedPlaying11()" disabled>
+        ✓ Submit Playing 11
+      </button>
+    </div>
   </div>
 </div>
 
