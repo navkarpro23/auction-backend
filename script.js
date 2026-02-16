@@ -246,44 +246,72 @@ function renderUpcomingPlayers(players) {
 
 let allTeamsData = null;
 let combinedPlaying11 = {}; // Store player -> position mapping
-
 function showPlaying11Selection(teams) {
   allTeamsData = teams;
+
   document.getElementById("auctionScreen").classList.add("hidden");
   document.getElementById("playing11Screen").classList.remove("hidden");
 
-  const playerList = document.getElementById("playerList");
-  playerList.innerHTML = "";
+  const availableDiv = document.getElementById("availablePlayers");
+  const slotsDiv = document.getElementById("slotsContainer");
 
-  // Get current user's players
+  availableDiv.innerHTML = "";
+  slotsDiv.innerHTML = "";
+
+  // Show bought players
   if (teams[username] && teams[username].players) {
     teams[username].players.forEach(player => {
       const div = document.createElement("div");
-      div.className = "player-position-item";
+      div.className = "draggable-player";
+      div.draggable = true;
+      div.innerText = player.name;
+      div.dataset.name = player.name;
 
-      div.innerHTML = `
-        <div class="player-select-wrapper">
-          <input type="checkbox" class="player-select" data-player="${player.name}" 
-                 onchange="updateCombinedCount()">
-          <span class="player-info">
-            <strong>${player.name}</strong>
-            <small>${player.role} - ₹${player.price.toFixed(2)} Cr</small>
-          </span>
-        </div>
-        <div class="position-select-wrapper">
-          <label>Position:</label>
-          <select class="position-select" data-player="${player.name}" 
-                  onchange="updateCombinedCount()" disabled>
-            <option value="">--</option>
-            ${Array.from({length: 11}, (_, i) => `<option value="${i + 1}">${i + 1}</option>`).join("")}
-          </select>
-        </div>
-      `;
+      div.addEventListener("dragstart", dragStart);
 
-      playerList.appendChild(div);
+      availableDiv.appendChild(div);
     });
   }
+
+  // Create 11 slots
+  for (let i = 1; i <= 11; i++) {
+    const slot = document.createElement("div");
+    slot.className = "slot";
+    slot.dataset.position = i;
+    slot.innerText = "Position " + i;
+
+    slot.addEventListener("dragover", dragOver);
+    slot.addEventListener("drop", dropPlayer);
+
+    slotsDiv.appendChild(slot);
+  }
 }
+
+
+
+let draggedPlayer = null;
+
+function dragStart(e) {
+  draggedPlayer = e.target;
+}
+
+function dragOver(e) {
+  e.preventDefault();
+}
+
+function dropPlayer(e) {
+  e.preventDefault();
+
+  if (!draggedPlayer) return;
+
+  // Clear slot if already filled
+  if (e.target.classList.contains("slot")) {
+    e.target.innerHTML = "";
+    e.target.appendChild(draggedPlayer);
+  }
+}
+
+
 
 function updateCombinedCount() {
   const playerItems = document.querySelectorAll(".player-position-item");
@@ -335,51 +363,28 @@ function updateCombinedCount() {
     submitBtn.classList.remove("ready");
   }
 }
-
 function submitCombinedPlaying11() {
-  // Re-validate from DOM on submit to ensure accuracy
-  const playerItems = document.querySelectorAll(".player-position-item");
+  const slots = document.querySelectorAll(".slot");
   const finalPlaying11 = {};
-  const usedPositions = new Set();
 
-  playerItems.forEach(item => {
-    const checkbox = item.querySelector(".player-select");
-    const positionSelect = item.querySelector(".position-select");
-    const playerName = checkbox.dataset.player;
-
-    if (checkbox.checked) {
-      const position = positionSelect.value;
-      if (position) {
-        const posNum = parseInt(position);
-        finalPlaying11[playerName] = posNum;
-        usedPositions.add(posNum);
-      }
+  slots.forEach(slot => {
+    const playerDiv = slot.querySelector(".draggable-player");
+    if (playerDiv) {
+      finalPlaying11[playerDiv.dataset.name] =
+        parseInt(slot.dataset.position);
     }
   });
 
-  // Validate
   if (Object.keys(finalPlaying11).length !== 11) {
-    alert("Please select exactly 11 players! Currently selected: " + Object.keys(finalPlaying11).length);
+    alert("Drag 11 players into positions!");
     return;
   }
-
-  if (usedPositions.size !== 11) {
-    alert("Please assign unique positions (1-11) to all 11 players! Unique positions: " + usedPositions.size);
-    return;
-  }
-
-  // Send both playing 11 and positions to backend
-  socket.send(JSON.stringify({
-    type: "playing_11",
-    players: Object.keys(finalPlaying11)
-  }));
 
   socket.send(JSON.stringify({
     type: "playing_11_positions",
     positions: finalPlaying11
   }));
 
-  // Show summary after submission
   document.getElementById("playing11Screen").classList.add("hidden");
   showSummaryScreenAfterPlaying11(allTeamsData);
 }
