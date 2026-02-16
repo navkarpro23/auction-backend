@@ -1983,3 +1983,31 @@ body.urgent-bg {
     color: black;
   }
 }
+
+.drag-container {
+  display: flex;
+  gap: 30px;
+  justify-content: space-between;
+}
+
+.available-players, .playing11-slots {
+  width: 45%;
+}
+
+.draggable-player {
+  padding: 10px;
+  margin-bottom: 8px;
+  background: rgba(34,197,94,0.2);
+  border-radius: 8px;
+  cursor: grab;
+}
+
+.slot {
+  height: 50px;
+  margin-bottom: 8px;
+  border: 2px dashed #22c55e;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+}
