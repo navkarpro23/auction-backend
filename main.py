@@ -1,7 +1,4 @@
-# main.py
-
-# Fix: Initialize room.all_players
-room.all_players = []
-
-# Additional logic for main.py
-# ...
+def create_room(...):
+    # Existing code...
+    room.all_players = []
+    # Continue with other initialization...
