@@ -15,10 +15,26 @@ class AuctionRoom:
         self.highest_bidder = None
         self.min_bid = 0
         self.timer = 10
+        self.timer_duration = 10  # Default mode
+        self.mode = "2026"  # Auction mode: "ogs" or "2026"
+        self.mode_name = "IPL 2026 Mock Auction"  # Default mode name
         self.admin = None
         self.started = False
         self.paused = False
         self.auction_ended = False   # Auction end status
+
+    # ✅ Set auction mode
+    def set_mode(self, mode, mode_name=""):
+        self.mode = mode
+        self.mode_name = mode_name or mode
+        # Timer duration can still be adjusted per mode if needed
+        if "Rapid" in self.mode_name or "rapid" in str(self.mode):
+            self.timer_duration = 5
+        elif "Lightning" in self.mode_name:
+            self.timer_duration = 3
+        else:
+            self.timer_duration = 10
+        self.timer = self.timer_duration
 
     # ✅ Set room creator as admin
     def set_admin(self, username):
@@ -48,7 +64,8 @@ class AuctionRoom:
             team.players.append({
                 "name": self.current_player["name"],
                 "role": self.current_player["role"],
-                "price": self.highest_bid
+                "price": self.highest_bid,
+                # ranking removed
             })
             team.purse -= self.highest_bid
 
@@ -75,12 +92,15 @@ class AuctionRoom:
 
     # ✅ Serialize teams for summary page
     def serialize_teams(self):
-        return {
-            name: {
+        result = {}
+
+        for name, team in self.teams.items():
+
+            result[name] = {
                 "purse": team.purse,
                 "players": team.players,
                 "playing_11": team.playing_11,
                 "playing_11_positions": team.playing_11_positions
             }
-            for name, team in self.teams.items()
-        }
+
+        return result
